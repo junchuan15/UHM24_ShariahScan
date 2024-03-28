@@ -75,6 +75,6 @@ def extract_and_print_values_from_pdf(pdf_path, pattern):
     checking(total_assets_rows, "Total assets")
     checking(bank_borrowing_rows, "Bank borrowing")
 
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
+pdf_path = r".\Dataset\MCOM 2022 Audit Report.pdf"
 pattern = r"STATEMENT OF FINANCIAL POSITION"
 extract_and_print_values_from_pdf(pdf_path, pattern)
