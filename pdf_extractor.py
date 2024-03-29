@@ -3,7 +3,7 @@ import re
 import firebase_admin
 from firebase_admin import db, credentials
 from firebase_admin import firestore
-
+import traceback
 
 class PDFExtractor:
     def __init__(self, pdf_path):
@@ -37,6 +37,7 @@ class PDFExtractor:
     def extract_last_values(self, row, registration_number, row_type):
         last_third_value = None
         last_fourth_value = None
+
         if row:
             if len(row) >= 3 and isinstance(row[-3], str): 
                 try:
@@ -44,12 +45,10 @@ class PDFExtractor:
                     if last_third_value_str.startswith("(") and last_third_value_str.endswith(")"):
                         last_third_value_str = "-" + last_third_value_str[1:-1]
                     last_third_value = int(last_third_value_str)
-
                     third_field_name = f"{row_type}_previous"
                     doc_ref = self.db.collection("Company").document(registration_number)
                     doc_ref.update({third_field_name: last_third_value})
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError)
             if len(row) >= 4 and isinstance(row[-4], str): 
                 try:
                     last_fourth_value_str = row[-4].replace(",", "").strip()
@@ -59,9 +58,9 @@ class PDFExtractor:
                     fourth_field_name = f"{row_type}_current"
                     doc_ref = self.db.collection("Company").document(registration_number)
                     doc_ref.update({fourth_field_name: last_fourth_value})
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError)
         return last_third_value, last_fourth_value
+
                 
     def extract_fp_data(self, pattern, registration_number):
         found_pages = self.pagelocate(pattern)
@@ -138,7 +137,7 @@ class PDFExtractor:
             last_third_value, last_fourth_value = (self.extract_last_values(row, registration_number, "II"))
 
         for row in beforetax_rows:
-            last_third_value, last_fourth_value = (self.extract_last_values(row, registration_number, "P/L Before Tax"))
+            last_third_value, last_fourth_value = (self.extract_last_values(row, registration_number, "PL_Before_Tax"))
             print(f"Last Third Value: {last_third_value}, Last Fourth Value: {last_fourth_value}")
 
             
