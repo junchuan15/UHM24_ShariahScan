@@ -140,10 +140,7 @@ class PDFExtractor:
 
         for row in beforetax_rows:
             last_third_value, last_fourth_value = (self.extract_last_values(row, registration_number, "PL_Before_Tax"))
-            print(f"Last Third Value: {last_third_value}, Last Fourth Value: {last_fourth_value}")
-
-            
-
+       
     def extract_name_and_registration(self):
         with pdfplumber.open(self.pdf_path) as pdf:
             first_page = pdf.pages[0]
