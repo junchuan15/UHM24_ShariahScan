@@ -162,7 +162,7 @@ class PDFExtractor:
             return name, registration_number
 
 # Example usage
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
+pdf_path = r".\Dataset\MCOM 2022 Audit Report.pdf"
 pdf_extractor = PDFExtractor(pdf_path)
 name, registration_number = pdf_extractor.extract_name_and_registration()
 print("Name:", name)
