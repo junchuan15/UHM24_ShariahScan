@@ -2,7 +2,7 @@ import pdfplumber
 import re
 import firebase_admin
 from firebase_admin import db, credentials
-from firebase_admin import firestore
+from firebase_adpmin import firestore
 import traceback
 
 class PDFExtractor:
@@ -48,7 +48,8 @@ class PDFExtractor:
                     third_field_name = f"{row_type}_previous"
                     doc_ref = self.db.collection("Company").document(registration_number)
                     doc_ref.update({third_field_name: last_third_value})
-                except (ValueError, TypeError)
+                except (ValueError, TypeError):
+                    pass
             if len(row) >= 4 and isinstance(row[-4], str): 
                 try:
                     last_fourth_value_str = row[-4].replace(",", "").strip()
@@ -58,7 +59,8 @@ class PDFExtractor:
                     fourth_field_name = f"{row_type}_current"
                     doc_ref = self.db.collection("Company").document(registration_number)
                     doc_ref.update({fourth_field_name: last_fourth_value})
-                except (ValueError, TypeError)
+                except (ValueError, TypeError):
+                    pass
         return last_third_value, last_fourth_value
 
                 
@@ -155,7 +157,7 @@ class PDFExtractor:
             return registration_number
 
 # Example usage
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
+pdf_path = r".\Dataset\MCOM 2022 Audit Report.pdf"
 pdf_extractor = PDFExtractor(pdf_path)
 registration_number = pdf_extractor.extract_name_and_registration()
 pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
