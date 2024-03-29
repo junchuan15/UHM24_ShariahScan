@@ -2,7 +2,7 @@ import pdfplumber
 import re
 import firebase_admin
 from firebase_admin import db, credentials
-from firebase_admin import firestore
+from firebase_adpmin import firestore
 import traceback
 
 class PDFExtractor:
@@ -154,7 +154,7 @@ class PDFExtractor:
             return registration_number
 
 # Example usage
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
+pdf_path = r".\Dataset\MCOM 2022 Audit Report.pdf"
 pdf_extractor = PDFExtractor(pdf_path)
 registration_number = pdf_extractor.extract_name_and_registration()
 pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
