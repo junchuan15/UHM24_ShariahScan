@@ -9,10 +9,10 @@ class PDFExtractor:
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
 
-    # authenticate to firebase
-    cred = credentials.Certificate("firebase.json")
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
+        # authenticate to firebase
+        cred = credentials.Certificate("firebase.json")
+        firebase_admin.initialize_app(cred)
+        self.db = firestore.client()
 
     def pagelocate(self, pattern):
         found_pages = []
@@ -111,51 +111,71 @@ class PDFExtractor:
 
     def extract_pol_data(self, pattern, registration_number):
         found_pages = self.pagelocate(pattern)
-        extracted_lines = []
-        for page_number in found_pages:
-            extracted_lines.extend(self.extract_text_from_pdf_with_tolerance(page_number - 1))
-
-        split_lines = [line.split() for line in extracted_lines]
+        if not found_pages:
+            return
 
         revenue_pattern = re.compile(r'Revenue', re.IGNORECASE)
         income_pattern = re.compile(r'(?:Interest|Financial)\s+(Income)', re.IGNORECASE)
-        beforetax_pattern = re.compile(r'(?:Profit|Loss)\s+Before\s+Tax', re.IGNORECASE)
-        revenue_rows = []
-        income_rows = []
-        beforetax_rows = []
+        beforetax_pattern = re.compile(r'(?:Profit|Loss|\(loss\))\s*(?:Before\s+Tax|before\staxation)?', re.IGNORECASE)
 
-        for line in split_lines:
-            line_text = ' '.join(line)
-            if revenue_pattern.search(line_text):
-                revenue_rows.append(line)
-            elif income_pattern.search(line_text):
-                income_rows.append(line)
-            elif beforetax_pattern.search(line_text):
-                beforetax_rows.append(line)
+        for page_number in found_pages:
+            extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
+            split_lines = [line.split() for line in extracted_lines]
 
-        for row in revenue_rows:
-            last_third_value, last_fourth_value = (self.extract_last_values(row, registration_number, "Revenue"))
-            
-        for row in income_rows:
-            last_third_value, last_fourth_value = (self.extract_last_values(row, registration_number, "II"))
+            revenue_rows = []
+            income_rows = []
+            beforetax_rows = []
 
-        for row in beforetax_rows:
-            last_third_value, last_fourth_value = (self.extract_last_values(row, registration_number, "PL_Before_Tax"))
-       
+            for line in split_lines:
+                line_text = ' '.join(line)
+                if revenue_pattern.search(line_text):
+                    revenue_rows.append(line)
+                elif income_pattern.search(line_text):
+                    income_rows.append(line)
+                elif beforetax_pattern.search(line_text):
+                    beforetax_rows.append(line)
+
+            for row in revenue_rows:
+                self.extract_last_values(row, registration_number, "Revenue")
+
+            for row in income_rows:
+                self.extract_last_values(row, registration_number, "II")
+
+            for row in beforetax_rows:
+                self.extract_last_values(row, registration_number, "PL_Before_Tax")
+
     def extract_name_and_registration(self):
         with pdfplumber.open(self.pdf_path) as pdf:
             first_page = pdf.pages[0]
             first_two_lines = first_page.extract_text().strip().split("\n")[:2]
             name = first_two_lines[0]
-            registration_number = re.search(
-                r"\d{12}\s*\([^)]+\)", first_two_lines[1]
-            ).group()
+            registration_number = re.search(r"\d{12}\s*\([^)]+\)", first_two_lines[1]).group()
+            announcement_date = None
+            date_pattern = r"\b(?:0?[1-9]|[12]\d|3[01])\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b"
+            page_num = self.pagelocate('Chartered Accountants')
+            if page_num:
+                for num in page_num:
+                    if num <= len(pdf.pages):
+                        page = pdf.pages[num - 1]
+                        text = page.extract_text()
+                        date_matches = re.findall(date_pattern, text, re.IGNORECASE)
+                        if date_matches:
+                            announcement_date = date_matches[-1]
+
+            financial_ended_date = None
+            date_pattern = r"\b(?:0?[1-9]|[12]\d|3[01])\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b"
+            first_page = pdf.pages[0]
+            text = first_page.extract_text()
+            date_match = re.search(date_pattern, text, re.IGNORECASE)
+            if date_match:
+                financial_ended_date = date_match.group(0)
+
             doc_ref = self.db.collection("Company").document(registration_number)
             doc_ref.set({"name": name})
             return registration_number
 
-# Example usage
 pdf_path = r".\Dataset\1_HSCB Financial Statements 31.12. 2014.pdf"
+
 pdf_extractor = PDFExtractor(pdf_path)
 registration_number = pdf_extractor.extract_name_and_registration()
 pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
