@@ -3,18 +3,6 @@ import re
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-categories = {
-    "Conventional Banking and Lending": ["Other income", "Deposits", "Interest income", "Interest expense", "Financial assets", "Financial liabilities", "Credit facilities"],
-    "Conventional Insurance": ["Insurance premiums", "Policyholders", "Claims", "Underwriting", "Reinsurance", "Actuarial reserves"],
-    "Gambling": ["Gross profit", "Other expenses", "Gaming revenue", "Betting", "Casino operations", "Lottery", "Gaming machines", "Wagering"],
-    "Liquor and Liquor-Related Activities": ["Alcohol sales", "Beverage revenue", "Brewery operations", "Distillery", "Wine production", "Spirits"],
-    "Pork and Pork-Related Activities": ["Pork products", "Pork sales", "Meat processing", "Pork supply chain", "Pork industry", "Swine farming"],
-    "Non-Halal Food and Beverages": ["Non-halal products", "Food sales", "Beverage sales", "Food processing", "Food safety standards", "Halal certification"],
-    "Tobacco and Tobacco-Related Activities": ["Tobacco sales", "Cigarette revenue", "Tobacco manufacturing", "Smoking products", "Tobacco industry", "Nicotine products"],
-    "Interest Income from Conventional Accounts and Instruments": ["Interest earned", "Fixed deposits", "Savings accounts", "Interest receivable", "Interest-bearing assets", "Treasury bonds"],
-    "Dividends from Shariah Non-Compliant Investments": ["Dividend income", "Equity investments", "Stock dividends", "Investment income", "Shareholder distributions", "Dividend yield"],
-    "Shariah Non-Compliant Entertainment": ["Entertainment expenses", "Event hosting", "Entertainment venues", "Leisure activities", "Cultural events", "Entertainment industry"]
-}
 
 class PDFExtractor:
 
@@ -46,7 +34,7 @@ class PDFExtractor:
                     text_lines.append(line.strip())
         return text_lines
     
-    def extract_last_values(self, row, registration_number, row_type):
+    def extract_last_values(self, row, registration_number, row_type, multiply_by_1000=False):
         last_third_value = None
         last_fourth_value = None
 
@@ -56,25 +44,45 @@ class PDFExtractor:
                     last_third_value_str = row[-3].replace(",", "").strip()
                     if last_third_value_str.startswith("(") and last_third_value_str.endswith(")"):
                         last_third_value_str = "-" + last_third_value_str[1:-1]
-                    last_third_value = int(last_third_value_str)
-                    third_field_name = f"{row_type}_previous"
-                    doc_ref = self.db.collection("Company").document(registration_number)
-                    doc_ref.update({third_field_name: last_third_value})
-                except (ValueError, TypeError):
-                    pass
+                    if last_third_value_str.isdigit():  # Check if the string contains only digits
+                        last_third_value = int(last_third_value_str)
+                        if "RM" in last_third_value_str and multiply_by_1000:
+                            last_third_value *= 1000
+                        else:
+                            pass
+                        third_field_name = f"{row_type}_previous"
+                        doc_ref = self.db.collection("Company").document(registration_number)
+                        doc_ref.update({third_field_name: last_third_value})
+                    else:
+                        print(f"Invalid numeric value: {last_third_value_str}")
+                except (ValueError, TypeError) as e:
+                    print(f"Error converting/multiplying value: {e}")
+            
             if len(row) >= 4 and isinstance(row[-4], str): 
                 try:
                     last_fourth_value_str = row[-4].replace(",", "").strip()
                     if last_fourth_value_str.startswith("(") and last_fourth_value_str.endswith(")"):
                         last_fourth_value_str = "-" + last_fourth_value_str[1:-1]
-                    last_fourth_value = int(last_fourth_value_str)
-                    fourth_field_name = f"{row_type}_current"
-                    doc_ref = self.db.collection("Company").document(registration_number)
-                    doc_ref.update({fourth_field_name: last_fourth_value})
-                except (ValueError, TypeError):
-                    pass
+                    if last_fourth_value_str.isdigit():  # Check if the string contains only digits
+                        last_fourth_value = int(last_fourth_value_str)
+                        if "RM" in last_fourth_value_str and multiply_by_1000:
+                            last_fourth_value *= 1000
+                        else:
+                            pass 
+                        fourth_field_name = f"{row_type}_current"
+                        doc_ref = self.db.collection("Company").document(registration_number)
+                        doc_ref.update({fourth_field_name: last_fourth_value})
+                    else:
+                        print(f"Invalid numeric value: {last_fourth_value_str}")
+                except (ValueError, TypeError) as e:
+                    print(f"Error converting/multiplying value: {e}")
+
         return last_third_value, last_fourth_value
 
+
+
+    def print_extracted_values(self, field_name, value):
+        print(f"Extracted {field_name}: {value}")
                 
     def extract_fp_data(self, pattern, registration_number):
         found_pages = self.pagelocate(pattern)
@@ -109,16 +117,17 @@ class PDFExtractor:
         non_current_bank_borrowing_rows = bank_borrowing_rows[:1] 
 
         for row in cash_bank_balances_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "CBB")
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "CBB", multiply_by_1000=True)
 
         for row in total_assets_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "TA")
-            
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "TA", multiply_by_1000=True)
+
         for row in non_current_bank_borrowing_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "Noncurrent_BB")
-        
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "Noncurrent_BB", multiply_by_1000=True)
+
         for row in current_bank_borrowing_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "current_BB")
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "current_BB", multiply_by_1000=True)
+
 
     def extract_pol_data(self, pattern, registration_number):
         found_pages = self.pagelocate(pattern)
@@ -155,45 +164,45 @@ class PDFExtractor:
             for row in beforetax_rows:
                 self.extract_last_values(row, registration_number, "PL_Before_Tax")
 
-    def extract_compliant_data(self, pattern, registration_number):
-        found_pages = self.pagelocate(pattern)
-        if not found_pages:
-            return
+    '''def extract_compliant_data(self, pattern, registration_number):
+            found_pages = self.pagelocate(pattern)
+            if not found_pages:
+                return
 
-        category_data = {}  # Dictionary to accumulate data for each category
+            category_data = {}  # Dictionary to accumulate data for each category
 
-        for category, keywords in categories.items():
-            category_field_name = re.sub(r'\W+', '_', category)  # Sanitize category name
-            category_pattern = re.compile(fr"\b({'|'.join(keywords)})\b", re.IGNORECASE)
+            for category, keywords in categories.items():
+                category_field_name = re.sub(r'\W+', '_', category)  # Sanitize category name
+                category_pattern = re.compile(fr"\b({'|'.join(keywords)})\b", re.IGNORECASE)
 
-            for page_number in found_pages:
-                extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
-                split_lines = [line.split() for line in extracted_lines]
+                for page_number in found_pages:
+                    extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
+                    split_lines = [line.split() for line in extracted_lines]
 
-                category_rows = []
+                    category_rows = []
 
-                for line in split_lines:
-                    line_text = ' '.join(line)
-                    if category_pattern.search(line_text):
-                        category_rows.append(line)
+                    for line in split_lines:
+                        line_text = ' '.join(line)
+                        if category_pattern.search(line_text):
+                            category_rows.append(line)
 
-                for row in category_rows:
-                    print(f"Category: {category}, Row: {row}")  # Check if it's extracting correct rows
-                    last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, f"non_syariah_{category_field_name}")
-                    # Accumulate data for each category
-                    category_data.setdefault(category, []).append((last_third_value, last_fourth_value))
+                    for row in category_rows:
+                        print(f"Category: {category}, Row: {row}")  # Check if it's extracting correct rows
+                        last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, f"non_syariah_{category_field_name}")
+                        # Accumulate data for each category
+                        category_data.setdefault(category, []).append((last_third_value, last_fourth_value))
 
-        # Update the Firestore database after accumulating data for all categories
-        for category, data_list in category_data.items():
-            current_values = [data[1] for data in data_list]
-            previous_values = [data[0] for data in data_list]
-            sanitized_field_name = re.sub(r'\W+', '_', category)
-            doc_ref = self.db.collection("Company").document(registration_number)
-            doc_ref.update({
-                f"non_syariah_{sanitized_field_name}_current": current_values,
-                f"non_syariah_{sanitized_field_name}_previous": previous_values
-            })
-
+            # Update the Firestore database after accumulating data for all categories
+            for category, data_list in category_data.items():
+                current_values = [data[1] for data in data_list]
+                previous_values = [data[0] for data in data_list]
+                sanitized_field_name = re.sub(r'\W+', '_', category)
+                doc_ref = self.db.collection("Company").document(registration_number)
+                doc_ref.update({
+                    f"non_syariah_{sanitized_field_name}_current": current_values,
+                    f"non_syariah_{sanitized_field_name}_previous": previous_values
+                })
+    '''
 
     def extract_name_and_registration(self):
         with pdfplumber.open(self.pdf_path) as pdf:
@@ -227,6 +236,8 @@ pdf_extractor = PDFExtractor(pdf_path)
 registration_number = pdf_extractor.extract_name_and_registration()
 pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
 pattern_pol = r"STATEMENT OF PROFIT OR LOSS"
+#pattern_compliant = r"SEGMENT\s+INFORMATION\s*|\s*SEGMENT\s+ANALYSIS\s*|\s*SEGMENT\s+REPORTING\s*|\s*OPERATING\s+SEGMENTS"
+
 fp_data = pdf_extractor.extract_fp_data(pattern_fp, registration_number)
 pol_data = pdf_extractor.extract_pol_data(pattern_pol, registration_number)
-compliant_data = pdf_extractor.extract_compliant_data(pattern_pol, registration_number)
+#compliant_data = pdf_extractor.extract_compliant_data(pattern_compliant, registration_number)
