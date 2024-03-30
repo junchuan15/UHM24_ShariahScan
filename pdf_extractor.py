@@ -211,10 +211,6 @@ class PDFExtractor:
                         text = page.extract_text()
                         date_matches = re.findall(date_pattern, text, re.IGNORECASE)
                         if date_matches:
-                            announcement_date = date_matches[-1]
-
-            financial_ended_date = None
-            date_pattern = r"\b(?:0?[1-9]|[12]\d|3[01])\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b"
             first_page = pdf.pages[0]
             text = first_page.extract_text()
             date_match = re.search(date_pattern, text, re.IGNORECASE)
