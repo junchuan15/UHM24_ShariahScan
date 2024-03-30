@@ -9,12 +9,15 @@ class Database:
             firebase_admin.initialize_app(cred)
         self.db = firestore.client()
 
+    
     def retrieve_company_data(self, company_name):
-        doc_ref = self.db.collection("Company").where("name", "==", company_name)
-        docs = doc_ref.get()
-        for doc in docs:
+        db = firestore.client()
+        doc_ref = db.collection("Company").where("name", "==", company_name)
+        for doc in doc_ref.get():
             data = doc.to_dict()
             company = Company(
+                name=data.get("name"),
+                FE_Date=data.get("FE_Date"),
                 CBB_current=data.get("CBB_current"),
                 CBB_previous=data.get("CBB_previous"),
                 Noncurrent_BB_current=data.get("Noncurrent_BB_current"),
@@ -27,15 +30,37 @@ class Database:
                 TA_previous=data.get("TA_previous"),
                 current_BB_current=data.get("current_BB_current"),
                 current_BB_previous=data.get("current_BB_previous"),
-                name=data.get("name"),
+                II_current=data.get("II_current"),
+                II_previous=data.get("II_previous"),
             )
+
+            # Calculate additional company metrics
             company.total_BB_current = company.Noncurrent_BB_current + company.current_BB_current
             company.total_BB_previous = company.Noncurrent_BB_previous + company.current_BB_previous
-            company.debt_percentage_current = (company.total_BB_current / company.TA_current) * 100
-            company.debt_percentage_previous = (company.total_BB_previous / company.TA_previous) * 100
-            company.cash_percentage_current = (company.CBB_current / company.TA_current) * 100
-            company.cash_percentage_previous = (company.CBB_previous / company.TA_previous) * 100
-            company.activity_percentage_current = (company.Revenue_current / company.TA_current) * 100
-            company.activity_percentage_previous = (company.Revenue_previous / company.TA_previous) * 100
+            company.debt_percentage_current = round((company.total_BB_current / company.TA_current) * 100, 2)
+            company.debt_percentage_previous = round((company.total_BB_previous / company.TA_previous) * 100, 2)
+            company.cash_percentage_current = round((company.CBB_current / company.TA_current) * 100, 2)
+            company.cash_percentage_previous = round((company.CBB_previous / company.TA_previous) * 100, 2)
 
         return company
+    
+    def get_principal_activity(self, company_name):
+        principal_activities = []
+        principal_values = []
+        
+        # Check if a document exists with the same name in the PrincipleActivities collection
+        principle_activity_doc_ref = self.db.collection("PrincipleActivities").document(company_name)
+        principle_activity_doc = principle_activity_doc_ref.get()
+        
+        if principle_activity_doc.exists:
+            # Retrieve the data from the document
+            principle_activities_data = principle_activity_doc.to_dict()
+            
+            # Iterate over the principal activities data and extract fields and values
+            for field, value in principle_activities_data.items():
+                principal_activities.append(field)
+                principal_values.append(value)
+        else:
+            print("No principal activities found for company in PrincipleActivities collection:", company_name)
+        
+        return principal_activities, principal_values

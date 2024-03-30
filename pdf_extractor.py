@@ -1,6 +1,10 @@
 import pdfplumber
 import re
+import firebase_admin
+from firebase_admin import db, credentials
+from firebase_admin import firestore
 from database import Database
+import logging
 
 class PDFExtractor:
 
@@ -120,7 +124,7 @@ class PDFExtractor:
             return
 
         revenue_pattern = re.compile(r'Revenue', re.IGNORECASE)
-        beforetax_pattern = re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax) | Profit/(loss) before taxation | Loss before taxation', re.IGNORECASE)
+        beforetax_pattern =  re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax) | Profit/(loss) before taxation | Loss before taxation | Profit/(loss) before | Loss before tax', re.IGNORECASE)
         
         for page_number in found_pages:
             extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
@@ -142,14 +146,16 @@ class PDFExtractor:
             for row in beforetax_rows:
                 self.extract_last_values(row, registration_number, "PL_Before_Tax", pattern)
 
-    def extract_interestincome_data(self, pattern, registration_number):
+    def extract_cf_data(self, pattern, registration_number):
         found_pages = self.pagelocate(pattern)
         if not found_pages:
             return
-        income_pattern = re.compile(r'(?:Interest|Financial)\s+(Income)', re.IGNORECASE)        
+        income_pattern = re.compile(r'(?:Interest|Financial)\s+(Income)', re.IGNORECASE)
+        
         for page_number in found_pages:
             extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
             split_lines = [line.split() for line in extracted_lines]
+
             income_rows = []
 
             for line in split_lines:
@@ -159,19 +165,18 @@ class PDFExtractor:
 
             for row in income_rows:
                 self.extract_last_values(row, registration_number, "II", pattern)
-
+                
     def extract_name_and_registration(self):
         with pdfplumber.open(self.pdf_path) as pdf:
             first_page = pdf.pages[0]
-            text = first_page.extract_text().strip()
-            lines = text.split("\n")
+            first_two_lines = first_page.extract_text().strip().split("\n")[:2]
             name = None
             registration_number = None
 
-            for line in lines:
+            for line in first_two_lines:
                 if "Registration" in line or "Company" in line:
                     registration_number = line.strip()
-                elif not name and "berhad" in line.lower():
+                else:
                     name = line.strip()
 
             announcement_date = None
@@ -204,8 +209,6 @@ class PDFExtractor:
 
         return registration_number, name
 
-
-
     def check_money(self, pattern):
         found_pages = self.pagelocate(pattern)
         extracted_lines = []
@@ -222,17 +225,57 @@ class PDFExtractor:
             if RM_pattern.search(line_text):
                 return True
         return False
+    
+
+
+    def principle_activities(self, registration_number, company_name):
+        switcher = {
+            "(Company No: 26877-W)": {
+                "Plantation": 495566,
+                "Property": 932115,
+                "Credit_financing": 133460,  # Modified key with underscore
+                "Automotive": 684030,
+                "Fertilizer_trading": 833128,  # Modified key with underscore
+                "Quarry_and_building_materials": 370423,  # Modified key with underscore
+                "Trading": 445327,
+                "Other_nonreportable_segments": 0  # Modified key with underscore
+            },
+            "Company No.:420405–P": {
+                "Investment_Holding": 36318552,  # Modified key with underscore
+                "Manufacturing": 861622590,
+                "Trading": 102312022,
+                "Others": 5058940
+            },
+            "(Registration no. 201701034106 (1248277 - X))": {
+                "Mobile_Payment_Solutions": 2614092,  # Modified key with underscore
+                "Mobile_Advertising_Platform": 3055696,  # Modified key with underscore
+                "Internet_Services": 0,
+                "Investment_Holding": 0
+            },
+        }
+
+        if registration_number in switcher:
+            activities = switcher.get(registration_number, {})
+            try:
+                doc_ref = self.db.db.collection("PrincipleActivities").document(company_name)
+                doc_ref.set(activities)
+                logging.info(f"Principle activities updated for document with registration number: {company_name}")
+            except Exception as e:
+                logging.error(f"Error updating principle activities for document with registration number {company_name}: {e}")
+        else:
+            logging.warning(f"No activities found for registration number: {company_name}")
 
 
     def extract_data_from_pdf(self):
         registration_number, company_name = self.extract_name_and_registration()
-        pattern_fp = r"(?=.*STATEMENTS?\S* OF FINANCIAL POSITION)(?!.*CONSOLIDATED)"
+        pattern_fp = r"STATEMENT?\S* OF FINANCIAL POSITION"
         pattern_pol = r"STATEMENT?\S* OF PROFIT OR LOSS | STATEMENT?\S* OF INCOME | INCOME STATEMENT?\S*"
         pattern_cf = r"STATEMENT?\S* OF CASH FLOWS"
         self.extract_fp_data(pattern_fp, registration_number)
         self.extract_pol_data(pattern_pol, registration_number)
-        self.extract_interestincome_data(pattern_cf, registration_number)
+        self.extract_cf_data(pattern_cf,registration_number)
+        self.principle_activities(registration_number, company_name)
         return company_name
     
-PDFExtractor = PDFExtractor(r"C:\Users\HP\Downloads\OCR-Audted Financial Statement for 31.07.2017.pdf")
+PDFExtractor = PDFExtractor(r"C:\Users\HP\Downloads\PermajuIndustriesBerhad-31 Dec 2014.pdf")
 company_name = PDFExtractor.extract_data_from_pdf()
