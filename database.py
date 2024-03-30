@@ -1,12 +1,12 @@
 import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import firestore
+from firebase_admin import credentials, firestore
 from company import Company
 
 class Database:
     def __init__(self):
-        cred = credentials.Certificate("firebase.json")
-        firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps: 
+            cred = credentials.Certificate("firebase.json")
+            firebase_admin.initialize_app(cred)
         self.db = firestore.client()
 
     def retrieve_company_data(self, company_name):
@@ -29,5 +29,13 @@ class Database:
                 current_BB_previous=data.get("current_BB_previous"),
                 name=data.get("name"),
             )
+            company.total_BB_current = company.Noncurrent_BB_current + company.current_BB_current
+            company.total_BB_previous = company.Noncurrent_BB_previous + company.current_BB_previous
+            company.debt_percentage_current = (company.total_BB_current / company.TA_current) * 100
+            company.debt_percentage_previous = (company.total_BB_previous / company.TA_previous) * 100
+            company.cash_percentage_current = (company.CBB_current / company.TA_current) * 100
+            company.cash_percentage_previous = (company.CBB_previous / company.TA_previous) * 100
+            company.activity_percentage_current = (company.Revenue_current / company.TA_current) * 100
+            company.activity_percentage_previous = (company.Revenue_previous / company.TA_previous) * 100
 
         return company

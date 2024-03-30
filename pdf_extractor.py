@@ -2,17 +2,13 @@ import pdfplumber
 import re
 import firebase_admin
 from firebase_admin import db, credentials
-from firebase_adpmin import firestore
-import traceback
+from firebase_admin import firestore
+from database import Database
 
 class PDFExtractor:
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
-
-        # authenticate to firebase
-        cred = credentials.Certificate("firebase.json")
-        firebase_admin.initialize_app(cred)
-        self.db = firestore.client()
+        self.db = Database()
 
     def pagelocate(self, pattern):
         found_pages = []
@@ -27,12 +23,12 @@ class PDFExtractor:
         text_lines = []
         with pdfplumber.open(self.pdf_path) as pdf:
             page = pdf.pages[page_number]
-            texts = page.extract_text(x_tolerance=2, y_tolerance=2)
+            texts = page.extract_text(x_tolerance=5, y_tolerance=2)
             lines = texts.split("\n")
             for line in lines:
                 if line.strip():
                     text_lines.append(line.strip())
-        return text_lines
+        return text_lines 
     
     def extract_last_values(self, row, registration_number, row_type):
         last_third_value = None
@@ -45,9 +41,12 @@ class PDFExtractor:
                     if last_third_value_str.startswith("(") and last_third_value_str.endswith(")"):
                         last_third_value_str = "-" + last_third_value_str[1:-1]
                     last_third_value = int(last_third_value_str)
+                    if self.check_money(pattern):  
+                        last_third_value *= 1000
                     third_field_name = f"{row_type}_previous"
-                    doc_ref = self.db.collection("Company").document(registration_number)
+                    doc_ref = self.db.db.collection("Company").document(registration_number)
                     doc_ref.update({third_field_name: last_third_value})
+                    print("Row from which value is extracted:", row)  
                 except (ValueError, TypeError):
                     pass
             if len(row) >= 4 and isinstance(row[-4], str): 
@@ -56,8 +55,10 @@ class PDFExtractor:
                     if last_fourth_value_str.startswith("(") and last_fourth_value_str.endswith(")"):
                         last_fourth_value_str = "-" + last_fourth_value_str[1:-1]
                     last_fourth_value = int(last_fourth_value_str)
+                    if self.check_money(pattern): 
+                        last_fourth_value *= 1000
                     fourth_field_name = f"{row_type}_current"
-                    doc_ref = self.db.collection("Company").document(registration_number)
+                    doc_ref = self.db.db.collection("Company").document(registration_number)
                     doc_ref.update({fourth_field_name: last_fourth_value})
                 except (ValueError, TypeError):
                     pass
@@ -74,11 +75,9 @@ class PDFExtractor:
 
         split_lines = [line.split() for line in extracted_lines]
 
-        cash_bank_balances_pattern = re.compile(
-            r"Cash\s+and\s+bank\s+balances", re.IGNORECASE
-        )
+        cash_bank_balances_pattern = re.compile(r"Cash\s+and\s+bank\s+balances", re.IGNORECASE)
         total_assets_pattern = re.compile(r"Total\s+assets", re.IGNORECASE)
-        bank_borrowing_pattern = re.compile(r"Bank\s+borrowing", re.IGNORECASE)
+        bank_borrowing_pattern = re.compile(r"(?:Bank\s)?borrowings?\b", re.IGNORECASE)
         cash_bank_balances_rows = []
         total_assets_rows = []
         bank_borrowing_rows = []
@@ -115,8 +114,8 @@ class PDFExtractor:
 
         revenue_pattern = re.compile(r'Revenue', re.IGNORECASE)
         income_pattern = re.compile(r'(?:Interest|Financial)\s+(Income)', re.IGNORECASE)
-        beforetax_pattern = re.compile(r'(?:Profit|Loss|\(loss\))\s*(?:Before\s+Tax|before\staxation)?', re.IGNORECASE)
-
+        beforetax_pattern = re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax)', re.IGNORECASE)
+        
         for page_number in found_pages:
             extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
             split_lines = [line.split() for line in extracted_lines]
@@ -147,8 +146,15 @@ class PDFExtractor:
         with pdfplumber.open(self.pdf_path) as pdf:
             first_page = pdf.pages[0]
             first_two_lines = first_page.extract_text().strip().split("\n")[:2]
-            name = first_two_lines[0]
-            registration_number = re.search(r"\d{12}\s*\([^)]+\)", first_two_lines[1]).group()
+            name = None
+            registration_number = None
+
+            for line in first_two_lines:
+                if "Registration" in line or "Company" in line:
+                    registration_number = line.strip()
+                else:
+                    name = line.strip()
+
             announcement_date = None
             date_pattern = r"\b(?:0?[1-9]|[12]\d|3[01])\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b"
             page_num = self.pagelocate('Chartered Accountants')
@@ -169,16 +175,41 @@ class PDFExtractor:
             if date_match:
                 financial_ended_date = date_match.group(0)
 
-            doc_ref = self.db.collection("Company").document(registration_number)
-            doc_ref.set({"name": name})
-            return registration_number
+            # Create document with registration number and company details
+            doc_ref = self.db.db.collection("Company").document(registration_number)
+            doc_ref.set({
+                "name": name,
+                "Announcement_Date": announcement_date,
+                "FE_Date": financial_ended_date
+            })
 
-# Example usage
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
-pdf_extractor = PDFExtractor(pdf_path)
-registration_number = pdf_extractor.extract_name_and_registration()
-pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
-pattern_pol = r"STATEMENT OF PROFIT OR LOSS"
-fp_data = pdf_extractor.extract_fp_data(pattern_fp,registration_number)
-pol_data = pdf_extractor.extract_pol_data(pattern_pol,registration_number)
+        return registration_number, name
 
+    def check_money(self, pattern):
+        found_pages = self.pagelocate(pattern)
+        extracted_lines = []
+        for page_number in found_pages:
+            extracted_lines.extend(
+                self.extract_text_from_pdf_with_tolerance(page_number - 1)
+            )
+
+        split_lines = [line.split() for line in extracted_lines]
+
+        RM_pattern = re.compile(r"RM'000", re.IGNORECASE)
+        for line in split_lines:
+            line_text = " ".join(line)
+            if RM_pattern.search(line_text):
+                return True
+        return False
+
+
+    def extract_data_from_pdf(self):
+        registration_number, company_name = self.extract_name_and_registration()
+        pattern_fp = r"STATEMENTS?\S* OF FINANCIAL POSITION"
+        pattern_pol = r"STATEMENT?\S* OF PROFIT OR LOSS"
+        self.extract_fp_data(pattern_fp, registration_number)
+        self.extract_pol_data(pattern_pol, registration_number)
+        return company_name
+    
+PDFExtractor = PDFExtractor(r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\9_Supermax Corporation Berhad-AFS 31.12.2014.pdf")
+company_name = PDFExtractor.extract_data_from_pdf()
