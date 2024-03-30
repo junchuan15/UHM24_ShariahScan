@@ -1,15 +1,27 @@
 import pdfplumber
 import re
 import firebase_admin
-from firebase_admin import db, credentials
-from firebase_admin import firestore
-import traceback
+from firebase_admin import credentials, firestore
+
+categories = {
+    "Conventional Banking and Lending": ["Other income", "Deposits", "Interest income", "Interest expense", "Financial assets", "Financial liabilities", "Credit facilities"],
+    "Conventional Insurance": ["Insurance premiums", "Policyholders", "Claims", "Underwriting", "Reinsurance", "Actuarial reserves"],
+    "Gambling": ["Gross profit", "Other expenses", "Gaming revenue", "Betting", "Casino operations", "Lottery", "Gaming machines", "Wagering"],
+    "Liquor and Liquor-Related Activities": ["Alcohol sales", "Beverage revenue", "Brewery operations", "Distillery", "Wine production", "Spirits"],
+    "Pork and Pork-Related Activities": ["Pork products", "Pork sales", "Meat processing", "Pork supply chain", "Pork industry", "Swine farming"],
+    "Non-Halal Food and Beverages": ["Non-halal products", "Food sales", "Beverage sales", "Food processing", "Food safety standards", "Halal certification"],
+    "Tobacco and Tobacco-Related Activities": ["Tobacco sales", "Cigarette revenue", "Tobacco manufacturing", "Smoking products", "Tobacco industry", "Nicotine products"],
+    "Interest Income from Conventional Accounts and Instruments": ["Interest earned", "Fixed deposits", "Savings accounts", "Interest receivable", "Interest-bearing assets", "Treasury bonds"],
+    "Dividends from Shariah Non-Compliant Investments": ["Dividend income", "Equity investments", "Stock dividends", "Investment income", "Shareholder distributions", "Dividend yield"],
+    "Shariah Non-Compliant Entertainment": ["Entertainment expenses", "Event hosting", "Entertainment venues", "Leisure activities", "Cultural events", "Entertainment industry"]
+}
 
 class PDFExtractor:
+
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
 
-        # authenticate to firebase
+        # Authenticate to Firebase
         cred = credentials.Certificate("firebase.json")
         firebase_admin.initialize_app(cred)
         self.db = firestore.client()
@@ -97,8 +109,7 @@ class PDFExtractor:
         non_current_bank_borrowing_rows = bank_borrowing_rows[:1] 
 
         for row in cash_bank_balances_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, regis
-                                                                           tration_number, "CBB")
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "CBB")
 
         for row in total_assets_rows:
             last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "TA")
@@ -144,6 +155,46 @@ class PDFExtractor:
             for row in beforetax_rows:
                 self.extract_last_values(row, registration_number, "PL_Before_Tax")
 
+    def extract_compliant_data(self, pattern, registration_number):
+        found_pages = self.pagelocate(pattern)
+        if not found_pages:
+            return
+
+        category_data = {}  # Dictionary to accumulate data for each category
+
+        for category, keywords in categories.items():
+            category_field_name = re.sub(r'\W+', '_', category)  # Sanitize category name
+            category_pattern = re.compile(fr"\b({'|'.join(keywords)})\b", re.IGNORECASE)
+
+            for page_number in found_pages:
+                extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
+                split_lines = [line.split() for line in extracted_lines]
+
+                category_rows = []
+
+                for line in split_lines:
+                    line_text = ' '.join(line)
+                    if category_pattern.search(line_text):
+                        category_rows.append(line)
+
+                for row in category_rows:
+                    print(f"Category: {category}, Row: {row}")  # Check if it's extracting correct rows
+                    last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, f"non_syariah_{category_field_name}")
+                    # Accumulate data for each category
+                    category_data.setdefault(category, []).append((last_third_value, last_fourth_value))
+
+        # Update the Firestore database after accumulating data for all categories
+        for category, data_list in category_data.items():
+            current_values = [data[1] for data in data_list]
+            previous_values = [data[0] for data in data_list]
+            sanitized_field_name = re.sub(r'\W+', '_', category)
+            doc_ref = self.db.collection("Company").document(registration_number)
+            doc_ref.update({
+                f"non_syariah_{sanitized_field_name}_current": current_values,
+                f"non_syariah_{sanitized_field_name}_previous": previous_values
+            })
+
+
     def extract_name_and_registration(self):
         with pdfplumber.open(self.pdf_path) as pdf:
             first_page = pdf.pages[0]
@@ -174,12 +225,12 @@ class PDFExtractor:
             doc_ref.set({"name": name})
             return registration_number
 
-pdf_path = r".\Dataset\1_HSCB Financial Statements 31.12. 2014.pdf"
+pdf_path = r".\Dataset\MCOM 2022 Audit Report.pdf"
 
 pdf_extractor = PDFExtractor(pdf_path)
 registration_number = pdf_extractor.extract_name_and_registration()
 pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
 pattern_pol = r"STATEMENT OF PROFIT OR LOSS"
-fp_data = pdf_extractor.extract_fp_data(pattern_fp,registration_number)
-pol_data = pdf_extractor.extract_pol_data(pattern_pol,registration_number)
-
+fp_data = pdf_extractor.extract_fp_data(pattern_fp, registration_number)
+pol_data = pdf_extractor.extract_pol_data(pattern_pol, registration_number)
+compliant_data = pdf_extractor.extract_compliant_data(pattern_pol, registration_number)
