@@ -2,7 +2,7 @@ import pdfplumber
 import re
 import firebase_admin
 from firebase_admin import db, credentials
-from firebase_adpmin import firestore
+from firebase_admin import firestore
 import traceback
 
 class PDFExtractor:
@@ -97,7 +97,8 @@ class PDFExtractor:
         non_current_bank_borrowing_rows = bank_borrowing_rows[:1] 
 
         for row in cash_bank_balances_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "CBB")
+            last_third_value, last_fourth_value = self.extract_last_values(row, regis
+                                                                           tration_number, "CBB")
 
         for row in total_assets_rows:
             last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "TA")
@@ -173,8 +174,8 @@ class PDFExtractor:
             doc_ref.set({"name": name})
             return registration_number
 
-# Example usage
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
+pdf_path = r".\Dataset\1_HSCB Financial Statements 31.12. 2014.pdf"
+
 pdf_extractor = PDFExtractor(pdf_path)
 registration_number = pdf_extractor.extract_name_and_registration()
 pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
