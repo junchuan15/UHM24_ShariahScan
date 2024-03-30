@@ -120,7 +120,7 @@ class PDFExtractor:
             return
 
         revenue_pattern = re.compile(r'Revenue', re.IGNORECASE)
-        beforetax_pattern = re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax) |Profit/(loss) before taxation', re.IGNORECASE)
+        beforetax_pattern = re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax) | Profit/(loss) before taxation | Loss before taxation', re.IGNORECASE)
         
         for page_number in found_pages:
             extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
@@ -234,5 +234,5 @@ class PDFExtractor:
         self.extract_interestincome_data(pattern_cf, registration_number)
         return company_name
     
-PDFExtractor = PDFExtractor(r"C:\Users\HP\Downloads\MNC - AFS 311213.pdf")
+PDFExtractor = PDFExtractor(r"C:\Users\HP\Downloads\OCR-Audted Financial Statement for 31.07.2017.pdf")
 company_name = PDFExtractor.extract_data_from_pdf()
