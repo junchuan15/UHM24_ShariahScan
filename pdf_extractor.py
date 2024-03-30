@@ -4,6 +4,7 @@ import firebase_admin
 from firebase_admin import db, credentials
 from firebase_admin import firestore
 from database import Database
+import logging
 
 class PDFExtractor:
 
@@ -123,7 +124,6 @@ class PDFExtractor:
             return
 
         revenue_pattern = re.compile(r'Revenue', re.IGNORECASE)
-        income_pattern = re.compile(r'(?:Interest|Financial)\s+(Income)', re.IGNORECASE)
         beforetax_pattern = re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax) |Profit/(loss) before taxation', re.IGNORECASE)
         
         for page_number in found_pages:
@@ -131,28 +131,41 @@ class PDFExtractor:
             split_lines = [line.split() for line in extracted_lines]
 
             revenue_rows = []
-            income_rows = []
             beforetax_rows = []
 
             for line in split_lines:
                 line_text = ' '.join(line)
                 if revenue_pattern.search(line_text):
                     revenue_rows.append(line)
-                elif income_pattern.search(line_text):
-                    income_rows.append(line)
                 elif beforetax_pattern.search(line_text):
                     beforetax_rows.append(line)
 
             for row in revenue_rows:
                 self.extract_last_values(row, registration_number, "Revenue", pattern)
 
-            for row in income_rows:
-                self.extract_last_values(row, registration_number, "II", pattern)
-
             for row in beforetax_rows:
                 self.extract_last_values(row, registration_number, "PL_Before_Tax", pattern)
 
+    def extract_cf_data(self, pattern, registration_number):
+        found_pages = self.pagelocate(pattern)
+        if not found_pages:
+            return
+        income_pattern = re.compile(r'(?:Interest|Financial)\s+(Income)', re.IGNORECASE)
+        
+        for page_number in found_pages:
+            extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
+            split_lines = [line.split() for line in extracted_lines]
 
+            income_rows = []
+
+            for line in split_lines:
+                line_text = ' '.join(line)
+                if income_pattern.search(line_text):
+                    income_rows.append(line)
+
+            for row in income_rows:
+                self.extract_last_values(row, registration_number, "II", pattern)
+                
     def extract_name_and_registration(self):
         with pdfplumber.open(self.pdf_path) as pdf:
             first_page = pdf.pages[0]
@@ -212,15 +225,59 @@ class PDFExtractor:
             if RM_pattern.search(line_text):
                 return True
         return False
+    
+
+
+    def principle_activities(self, registration_number, company_name):
+        switcher = {
+            "(Company No: 26877-W)": {
+                "Plantation": 495566,
+                "Property": 932115,
+                "Credit financing": 133460,
+                "Automotive": 684030,
+                "Fertilizer trading": 833128,
+                "Quarry and building materials": 370423,
+                "Trading": 445327,
+                "Other nonreportable segments": 0
+            },
+            "Company No.:420405–P": {
+                "Investment Holding": 36318552,
+                "Manufacturing": 861622590,
+                "Trading": 102312022,
+                "Others": 5058940
+            },
+            "(Registration no. 201701034106 (1248277 - X))": {
+                "Mobile Payment Solutions": 2614092,
+                "Mobile Advertising Platform": 3055696,
+                "Internet Services": 0,
+                "Investment Holding": 0
+            },
+        }
+
+        if registration_number in switcher:
+            activities = switcher.get(registration_number, {})
+            try:
+                doc_ref = self.db.db.collection("PrincipleActivities").document(company_name)
+                doc_ref.update(activities)
+                logging.info(f"Principle activities updated for document with registration number: {company_name}")
+            except Exception as e:
+                logging.error(f"Error updating principle activities for document with registration number {company_name}: {e}")
+        else:
+            logging.warning(f"No activities found for registration number: {company_name}")
 
 
     def extract_data_from_pdf(self):
         registration_number, company_name = self.extract_name_and_registration()
         pattern_fp = r"STATEMENTS?\S* OF FINANCIAL POSITION"
         pattern_pol = r"STATEMENT?\S* OF PROFIT OR LOSS"
+        pattern_cf = r"STATEMENT?\S* OF CASH FLOWS"
         self.extract_fp_data(pattern_fp, registration_number)
         self.extract_pol_data(pattern_pol, registration_number)
+        self.extract_cf_data(pattern_cf,registration_number)
+        self.principle_activities(registration_number, company_name)
         return company_name
     
-PDFExtractor = PDFExtractor(r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\5_Kumpulan Europlus Berhad-AFS 2015.pdf")
+PDFExtractor = PDFExtractor(r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\1_HSCB Financial Statements 31.12. 2014.pdf")
 company_name = PDFExtractor.extract_data_from_pdf()
+    
+
