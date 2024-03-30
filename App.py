@@ -27,15 +27,19 @@ def run_website():
     db = Database()
     with st.sidebar:
         selected = option_menu('Auto Shariah',
-                               ['Shariah Screener',
-                                'Graphs & Analyses',
-                                'Feedback',
-                                ],
-                                      default_index=0)
+                            
+                            ['Shariah Screener',
+                             'Graphs & Analyses',
+                             'Feedback',
+                            ],
+                            default_index=0)
+
     if selected == 'Shariah Screener':
+
         uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
         if uploaded_file is not None:
-            bytes_data = uploaded_file.read()
+          bytes_data = uploaded_file.read()
+          st.write("filename:", uploaded_file.name)
 
             if st.button("Process", type="primary"):
                 pdf_path = f"./{uploaded_file.name}"
@@ -131,3 +135,5 @@ def run_website():
 
 
 run_website()
+
+        
