@@ -2,7 +2,7 @@ import pdfplumber
 import re
 import firebase_admin
 from firebase_admin import db, credentials
-from firebase_adpmin import firestore
+from firebase_admin import firestore
 import traceback
 
 class PDFExtractor:
@@ -170,15 +170,22 @@ class PDFExtractor:
                 financial_ended_date = date_match.group(0)
 
             doc_ref = self.db.collection("Company").document(registration_number)
-            doc_ref.set({"name": name})
-            return registration_number
+            doc_ref.set({
+                "name": name,
+                "Announcement_Date": announcement_date,
+                "FE_Date": financial_ended_date
+            })
 
-# Example usage
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
-pdf_extractor = PDFExtractor(pdf_path)
-registration_number = pdf_extractor.extract_name_and_registration()
-pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
-pattern_pol = r"STATEMENT OF PROFIT OR LOSS"
-fp_data = pdf_extractor.extract_fp_data(pattern_fp,registration_number)
-pol_data = pdf_extractor.extract_pol_data(pattern_pol,registration_number)
+        return registration_number, name
 
+    def extract_data_from_pdf(self):
+        registration_number, company_name = self.extract_name_and_registration()
+        pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
+        pattern_pol = r"STATEMENT OF PROFIT OR LOSS | COMPREHENSIVE INCOME"
+        self.extract_fp_data(pattern_fp, registration_number)
+        self.extract_pol_data(pattern_pol, registration_number)
+        return company_name
+    
+    
+pdf_extractor = PDFExtractor(r".\Dataset\MCOM 2022 Audit Report.pdf")
+name = pdf_extractor.extract_data_from_pdf()
