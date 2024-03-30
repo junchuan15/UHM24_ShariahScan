@@ -71,11 +71,8 @@ class PDFExtractor:
             )
 
         split_lines = [line.split() for line in extracted_lines]
-
-        cash_bank_balances_pattern = re.compile(
-            r"Cash\s+and\s+bank\s+balances", re.IGNORECASE
-        )
-        total_assets_pattern = re.compile(r"Total\s+assets", re.IGNORECASE)
+        cash_bank_balances_pattern = re.compile(r"Cash(?:\s+and\s+(?:cash\s+equivalents|bank))?|Cash\s+Balance|Bank|Cash\s*&?\s*Equivalents|Bank\s+Balances", re.IGNORECASE)
+        total_assets_pattern = re.compile(r"Total\s+assets?", re.IGNORECASE)
         bank_borrowing_pattern = re.compile(r"Bank\s+borrowing", re.IGNORECASE)
         cash_bank_balances_rows = []
         total_assets_rows = []
@@ -151,14 +148,20 @@ class PDFExtractor:
                 r"\d{12}\s*\([^)]+\)", first_two_lines[1]
             ).group()
             doc_ref = self.db.collection("Company").document(registration_number)
-            doc_ref.set({"name": name})
-            return registration_number
+            doc_ref.set({
+                "name": name,
+                "Announcement_Date": announcement_date,
+                "FE_Date": financial_ended_date
+            })
 
-pdf_path = r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\Dataset\MCOM 2022 Audit Report.pdf"
-pdf_extractor = PDFExtractor(pdf_path)
-registration_number = pdf_extractor.extract_name_and_registration()
-pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
-pattern_pol = r"STATEMENT OF PROFIT OR LOSS"
-fp_data = pdf_extractor.extract_fp_data(pattern_fp,registration_number)
-pol_data = pdf_extractor.extract_pol_data(pattern_pol,registration_number)
-
+    def extract_data_from_pdf(self):
+        registration_number, company_name = self.extract_name_and_registration()
+        pattern_fp = r"STATEMENT OF FINANCIAL POSITION"
+        pattern_pol = r"STATEMENT OF PROFIT OR LOSS | COMPREHENSIVE INCOME"
+        self.extract_fp_data(pattern_fp, registration_number)
+        self.extract_pol_data(pattern_pol, registration_number)
+        return company_name
+    
+    
+pdf_extractor = PDFExtractor(r".\Dataset\MCOM 2022 Audit Report.pdf")
+name = pdf_extractor.extract_data_from_pdf()
