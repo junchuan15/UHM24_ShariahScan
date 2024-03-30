@@ -43,3 +43,24 @@ class Database:
             company.cash_percentage_previous = round((company.CBB_previous / company.TA_previous) * 100, 2)
 
         return company
+    
+    def get_principal_activity(self, company_name):
+        principal_activities = []
+        principal_values = []
+        
+        # Check if a document exists with the same name in the PrincipleActivities collection
+        principle_activity_doc_ref = self.db.collection("PrincipleActivities").document(company_name)
+        principle_activity_doc = principle_activity_doc_ref.get()
+        
+        if principle_activity_doc.exists:
+            # Retrieve the data from the document
+            principle_activities_data = principle_activity_doc.to_dict()
+            
+            # Iterate over the principal activities data and extract fields and values
+            for field, value in principle_activities_data.items():
+                principal_activities.append(field)
+                principal_values.append(value)
+        else:
+            print("No principal activities found for company in PrincipleActivities collection:", company_name)
+        
+        return principal_activities, principal_values

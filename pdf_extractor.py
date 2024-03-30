@@ -233,24 +233,24 @@ class PDFExtractor:
             "(Company No: 26877-W)": {
                 "Plantation": 495566,
                 "Property": 932115,
-                "Credit financing": 133460,
+                "Credit_financing": 133460,  # Modified key with underscore
                 "Automotive": 684030,
-                "Fertilizer trading": 833128,
-                "Quarry and building materials": 370423,
+                "Fertilizer_trading": 833128,  # Modified key with underscore
+                "Quarry_and_building_materials": 370423,  # Modified key with underscore
                 "Trading": 445327,
-                "Other nonreportable segments": 0
+                "Other_nonreportable_segments": 0  # Modified key with underscore
             },
             "Company No.:420405–P": {
-                "Investment Holding": 36318552,
+                "Investment_Holding": 36318552,  # Modified key with underscore
                 "Manufacturing": 861622590,
                 "Trading": 102312022,
                 "Others": 5058940
             },
             "(Registration no. 201701034106 (1248277 - X))": {
-                "Mobile Payment Solutions": 2614092,
-                "Mobile Advertising Platform": 3055696,
-                "Internet Services": 0,
-                "Investment Holding": 0
+                "Mobile_Payment_Solutions": 2614092,  # Modified key with underscore
+                "Mobile_Advertising_Platform": 3055696,  # Modified key with underscore
+                "Internet_Services": 0,
+                "Investment_Holding": 0
             },
         }
 
@@ -258,7 +258,7 @@ class PDFExtractor:
             activities = switcher.get(registration_number, {})
             try:
                 doc_ref = self.db.db.collection("PrincipleActivities").document(company_name)
-                doc_ref.update(activities)
+                doc_ref.set(activities)
                 logging.info(f"Principle activities updated for document with registration number: {company_name}")
             except Exception as e:
                 logging.error(f"Error updating principle activities for document with registration number {company_name}: {e}")
@@ -276,8 +276,5 @@ class PDFExtractor:
         self.extract_cf_data(pattern_cf,registration_number)
         self.principle_activities(registration_number, company_name)
         return company_name
-    
-PDFExtractor = PDFExtractor(r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\1_HSCB Financial Statements 31.12. 2014.pdf")
-company_name = PDFExtractor.extract_data_from_pdf()
     
 
