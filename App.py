@@ -32,7 +32,6 @@ def run_website():
 
         
     # Check if the selected option is 'Shariah Screener'
-=======
 
 
     if selected == 'Shariah Screener':
