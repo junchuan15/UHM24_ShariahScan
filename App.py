@@ -41,7 +41,7 @@ def run_website():
           bytes_data = uploaded_file.read()
           st.write("filename:", uploaded_file.name)
 
-            if st.button("Process", type="primary"):
+        if st.button("Process", type="primary"):
                 pdf_path = f"./{uploaded_file.name}"
                 pdf_extractor = PDFExtractor(pdf_path)
                 company_name = pdf_extractor.extract_data_from_pdf()

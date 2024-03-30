@@ -31,7 +31,7 @@ class PDFExtractor:
                     text_lines.append(line.strip())
         return text_lines 
     
-    def extract_last_values(self, row, registration_number, row_type):
+    def extract_last_values(self, row, registration_number, row_type, pattern):
         last_third_value = None
         last_fourth_value = None
 
@@ -42,12 +42,12 @@ class PDFExtractor:
                     if last_third_value_str.startswith("(") and last_third_value_str.endswith(")"):
                         last_third_value_str = "-" + last_third_value_str[1:-1]
                     last_third_value = int(last_third_value_str)
-                    if self.check_money(pattern):  
+                    if self.check_money(pattern): 
                         last_third_value *= 1000
                     third_field_name = f"{row_type}_previous"
                     doc_ref = self.db.db.collection("Company").document(registration_number)
                     doc_ref.update({third_field_name: last_third_value})
-                    print("Row from which value is extracted:", row)  
+                    print("Row from which value is extracted:", row) 
                 except (ValueError, TypeError):
                     pass
             if len(row) >= 4 and isinstance(row[-4], str): 
@@ -64,6 +64,7 @@ class PDFExtractor:
                 except (ValueError, TypeError):
                     pass
         return last_third_value, last_fourth_value
+
 
                 
     def extract_fp_data(self, pattern, registration_number):
@@ -97,16 +98,24 @@ class PDFExtractor:
         non_current_bank_borrowing_rows = bank_borrowing_rows[:1] 
 
         for row in cash_bank_balances_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "CBB")
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "CBB", pattern)
+            print(last_third_value)
+            print(last_fourth_value)
 
         for row in total_assets_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "TA")
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "TA", pattern)
+            print(last_third_value)
+            print(last_fourth_value)
             
         for row in non_current_bank_borrowing_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "Noncurrent_BB")
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "Noncurrent_BB", pattern)
+            print(last_third_value)
+            print(last_fourth_value)
         
         for row in current_bank_borrowing_rows:
-            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "current_BB")
+            last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, "current_BB", pattern)
+            print(last_third_value)
+            print(last_fourth_value)
 
     def extract_pol_data(self, pattern, registration_number):
         found_pages = self.pagelocate(pattern)
@@ -115,7 +124,7 @@ class PDFExtractor:
 
         revenue_pattern = re.compile(r'Revenue', re.IGNORECASE)
         income_pattern = re.compile(r'(?:Interest|Financial)\s+(Income)', re.IGNORECASE)
-        beforetax_pattern = re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax)', re.IGNORECASE)
+        beforetax_pattern = re.compile(r'(?:Profit|Loss|\b\w+\b)\s+(?:Before Tax) |Profit/(loss) before taxation', re.IGNORECASE)
         
         for page_number in found_pages:
             extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
@@ -135,52 +144,13 @@ class PDFExtractor:
                     beforetax_rows.append(line)
 
             for row in revenue_rows:
-                self.extract_last_values(row, registration_number, "Revenue")
+                self.extract_last_values(row, registration_number, "Revenue", pattern)
 
             for row in income_rows:
-                self.extract_last_values(row, registration_number, "II")
+                self.extract_last_values(row, registration_number, "II", pattern)
 
             for row in beforetax_rows:
-                self.extract_last_values(row, registration_number, "PL_Before_Tax")
-
-    def extract_compliant_data(self, pattern, registration_number):
-        found_pages = self.pagelocate(pattern)
-        if not found_pages:
-            return
-
-        category_data = {}  # Dictionary to accumulate data for each category
-
-        for category, keywords in categories.items():
-            category_field_name = re.sub(r'\W+', '_', category)  # Sanitize category name
-            category_pattern = re.compile(fr"\b({'|'.join(keywords)})\b", re.IGNORECASE)
-
-            for page_number in found_pages:
-                extracted_lines = self.extract_text_from_pdf_with_tolerance(page_number - 1)
-                split_lines = [line.split() for line in extracted_lines]
-
-                category_rows = []
-
-                for line in split_lines:
-                    line_text = ' '.join(line)
-                    if category_pattern.search(line_text):
-                        category_rows.append(line)
-
-                for row in category_rows:
-                    print(f"Category: {category}, Row: {row}")  # Check if it's extracting correct rows
-                    last_third_value, last_fourth_value = self.extract_last_values(row, registration_number, f"non_syariah_{category_field_name}")
-                    # Accumulate data for each category
-                    category_data.setdefault(category, []).append((last_third_value, last_fourth_value))
-
-        # Update the Firestore database after accumulating data for all categories
-        for category, data_list in category_data.items():
-            current_values = [data[1] for data in data_list]
-            previous_values = [data[0] for data in data_list]
-            sanitized_field_name = re.sub(r'\W+', '_', category)
-            doc_ref = self.db.collection("Company").document(registration_number)
-            doc_ref.update({
-                f"non_syariah_{sanitized_field_name}_current": current_values,
-                f"non_syariah_{sanitized_field_name}_previous": previous_values
-            })
+                self.extract_last_values(row, registration_number, "PL_Before_Tax", pattern)
 
 
     def extract_name_and_registration(self):
@@ -236,7 +206,7 @@ class PDFExtractor:
 
         split_lines = [line.split() for line in extracted_lines]
 
-        RM_pattern = re.compile(r"RM'000", re.IGNORECASE)
+        RM_pattern = re.compile(r"RM’000", re.IGNORECASE)
         for line in split_lines:
             line_text = " ".join(line)
             if RM_pattern.search(line_text):
@@ -252,5 +222,5 @@ class PDFExtractor:
         self.extract_pol_data(pattern_pol, registration_number)
         return company_name
     
-PDFExtractor = PDFExtractor(r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\9_Supermax Corporation Berhad-AFS 31.12.2014.pdf")
+PDFExtractor = PDFExtractor(r"C:\UM\Y2S2\2024Competition\Um  Hack\ShariahScan\5_Kumpulan Europlus Berhad-AFS 2015.pdf")
 company_name = PDFExtractor.extract_data_from_pdf()
