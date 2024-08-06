@@ -3,4 +3,4 @@ TechNOManual is a web application that provide automated data extraction and cal
 To test run the website,
 1. Clone the repository
 2. Install the needed dependency
-3. Run the website: flutter run App.py
+3. Run the website: streamlit run App.py
